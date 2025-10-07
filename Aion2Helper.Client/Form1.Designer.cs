@@ -35,6 +35,8 @@
             this.tabPageHistory = new TabPage();
             this.tabPagePriceTrend = new TabPage();
             this.groupBoxTrendFilter = new GroupBox();
+            this.lblTrendCategory = new Label();
+            this.comboBoxTrendCategory = new ComboBox();
             this.lblTrendItem = new Label();
             this.comboBoxTrendItem = new ComboBox();
             this.lblTrendStartDate = new Label();
@@ -228,6 +230,7 @@
             this.listViewOpportunities.UseCompatibleStateImageBehavior = false;
             this.listViewOpportunities.View = View.Details;
             this.listViewOpportunities.Columns.Add("物品名称", 150);
+            this.listViewOpportunities.Columns.Add("物品分类", 100);
             this.listViewOpportunities.Columns.Add("等级", 50);
             this.listViewOpportunities.Columns.Add("当前价格", 100);
             this.listViewOpportunities.Columns.Add("预期价格", 100);
@@ -308,8 +311,8 @@
             this.Text = "Aion 2 拍卖行智能辅助系统 v1.0";
             this.Load += new EventHandler(this.Form1_Load);
             
-            this.InitializeSettingsControls();
-            this.InitializeHistoryControls();
+            this.InitializeHistoryControls();  // 必须先创建控件
+            this.InitializeSettingsControls(); // 然后才能添加控件
             
             this.tabControl1.ResumeLayout(false);
             this.tabPageMonitor.ResumeLayout(false);
@@ -692,7 +695,85 @@
 
             // 示例数据将通过代码动态添加到ListView
 
+            // 初始化AI配置显示区域
+            this.groupBoxAIStatus = new GroupBox();
+            this.lblAIStatusTitle = new Label();
+            this.lblAIModeStatus = new Label();
+            this.lblAIWeightsStatus = new Label();
+            this.lblAIAutoStatus = new Label();
+            this.lblAISafetyStatus = new Label();
+            this.lblAINote = new Label();
+            
+            this.groupBoxAIStatus.SuspendLayout();
+            
+            // groupBoxAIStatus
+            this.groupBoxAIStatus.Controls.Add(this.lblAIStatusTitle);
+            this.groupBoxAIStatus.Controls.Add(this.lblAIModeStatus);
+            this.groupBoxAIStatus.Controls.Add(this.lblAIWeightsStatus);
+            this.groupBoxAIStatus.Controls.Add(this.lblAIAutoStatus);
+            this.groupBoxAIStatus.Controls.Add(this.lblAISafetyStatus);
+            this.groupBoxAIStatus.Controls.Add(this.lblAINote);
+            this.groupBoxAIStatus.Location = new Point(10, 545);
+            this.groupBoxAIStatus.Name = "groupBoxAIStatus";
+            this.groupBoxAIStatus.Size = new Size(1170, 200);
+            this.groupBoxAIStatus.TabIndex = 1;
+            this.groupBoxAIStatus.TabStop = false;
+            this.groupBoxAIStatus.Text = "🤖 AI智能分析配置状态（只读）";
+            this.groupBoxAIStatus.Font = new Font("Microsoft YaHei UI", 10, FontStyle.Bold);
+            
+            // lblAIStatusTitle
+            this.lblAIStatusTitle.Location = new Point(20, 30);
+            this.lblAIStatusTitle.Name = "lblAIStatusTitle";
+            this.lblAIStatusTitle.Size = new Size(1130, 25);
+            this.lblAIStatusTitle.TabIndex = 0;
+            this.lblAIStatusTitle.Text = "📊 当前AI配置：";
+            this.lblAIStatusTitle.Font = new Font("Microsoft YaHei UI", 9, FontStyle.Bold);
+            
+            // lblAIModeStatus
+            this.lblAIModeStatus.Location = new Point(20, 60);
+            this.lblAIModeStatus.Name = "lblAIModeStatus";
+            this.lblAIModeStatus.Size = new Size(1130, 20);
+            this.lblAIModeStatus.TabIndex = 1;
+            this.lblAIModeStatus.Text = "AI模式: 加载中...";
+            this.lblAIModeStatus.Font = new Font("Microsoft YaHei UI", 9);
+            
+            // lblAIWeightsStatus
+            this.lblAIWeightsStatus.Location = new Point(20, 85);
+            this.lblAIWeightsStatus.Name = "lblAIWeightsStatus";
+            this.lblAIWeightsStatus.Size = new Size(1130, 20);
+            this.lblAIWeightsStatus.TabIndex = 2;
+            this.lblAIWeightsStatus.Text = "权重分配: 加载中...";
+            this.lblAIWeightsStatus.Font = new Font("Microsoft YaHei UI", 9);
+            
+            // lblAIAutoStatus
+            this.lblAIAutoStatus.Location = new Point(20, 110);
+            this.lblAIAutoStatus.Name = "lblAIAutoStatus";
+            this.lblAIAutoStatus.Size = new Size(1130, 20);
+            this.lblAIAutoStatus.TabIndex = 3;
+            this.lblAIAutoStatus.Text = "自动购买: 加载中...";
+            this.lblAIAutoStatus.Font = new Font("Microsoft YaHei UI", 9);
+            
+            // lblAISafetyStatus
+            this.lblAISafetyStatus.Location = new Point(20, 135);
+            this.lblAISafetyStatus.Name = "lblAISafetyStatus";
+            this.lblAISafetyStatus.Size = new Size(1130, 20);
+            this.lblAISafetyStatus.TabIndex = 4;
+            this.lblAISafetyStatus.Text = "安全限制: 加载中...";
+            this.lblAISafetyStatus.Font = new Font("Microsoft YaHei UI", 9);
+            
+            // lblAINote
+            this.lblAINote.Location = new Point(20, 165);
+            this.lblAINote.Name = "lblAINote";
+            this.lblAINote.Size = new Size(1130, 25);
+            this.lblAINote.TabIndex = 5;
+            this.lblAINote.Text = "💡 提示：AI配置需要在管理端（Aion2Helper.Admin）进行设置";
+            this.lblAINote.Font = new Font("Microsoft YaHei UI", 8);
+            this.lblAINote.ForeColor = Color.Gray;
+            
+            this.groupBoxAIStatus.ResumeLayout(false);
+            
             // 将控件添加到监控设置页面
+            this.tabPageSettings.Controls.Add(this.groupBoxAIStatus);
             this.tabPageSettings.Controls.Add(this.groupBoxItemMonitor);
 
             // 将交易设置添加到交易设置页面
@@ -842,19 +923,6 @@
             this.btnHistoryReset.Text = "🔄 重置";
             this.btnHistoryReset.UseVisualStyleBackColor = false;
 
-            // 添加测试数据按钮
-            this.btnAddTestData = new Button();
-            this.btnAddTestData.BackColor = Color.FromArgb(40, 167, 69);
-            this.btnAddTestData.FlatStyle = FlatStyle.Flat;
-            this.btnAddTestData.ForeColor = Color.White;
-            this.btnAddTestData.Location = new Point(980, 25);
-            this.btnAddTestData.Name = "btnAddTestData";
-            this.btnAddTestData.Size = new Size(100, 30);
-            this.btnAddTestData.TabIndex = 10;
-            this.btnAddTestData.Text = "📊 添加测试数据";
-            this.btnAddTestData.UseVisualStyleBackColor = false;
-            this.groupBoxHistoryFilter.Controls.Add(this.btnAddTestData);
-
             // 交易历史列表组
             this.groupBoxHistoryList.Controls.Add(this.listViewHistory);
             this.groupBoxHistoryList.Controls.Add(this.lblHistoryStats);
@@ -889,6 +957,7 @@
             // 添加列标题
             this.listViewHistory.Columns.Add("购买时间", 220);
             this.listViewHistory.Columns.Add("物品名称", 180);
+            this.listViewHistory.Columns.Add("物品分类", 100);
             this.listViewHistory.Columns.Add("购买价格", 100);
             this.listViewHistory.Columns.Add("数量", 60);
             this.listViewHistory.Columns.Add("总金额", 100);
@@ -975,6 +1044,10 @@
             this.comboBoxHistoryPageSize.Items.AddRange(new object[] { "10", "20", "50", "100" });
             this.comboBoxHistoryPageSize.SelectedIndex = 1; // 默认20条
 
+            // 将交易历史控件添加到交易历史页面
+            this.tabPageHistory.Controls.Add(this.groupBoxHistoryFilter);
+            this.tabPageHistory.Controls.Add(this.groupBoxHistoryList);
+
             // tabPagePriceTrend
             this.tabPagePriceTrend.Controls.Add(this.groupBoxTrendFilter);
             this.tabPagePriceTrend.Controls.Add(this.groupBoxTrendChart);
@@ -988,6 +1061,8 @@
             this.tabPagePriceTrend.UseVisualStyleBackColor = true;
             
             // groupBoxTrendFilter
+            this.groupBoxTrendFilter.Controls.Add(this.lblTrendCategory);
+            this.groupBoxTrendFilter.Controls.Add(this.comboBoxTrendCategory);
             this.groupBoxTrendFilter.Controls.Add(this.lblTrendItem);
             this.groupBoxTrendFilter.Controls.Add(this.comboBoxTrendItem);
             this.groupBoxTrendFilter.Controls.Add(this.lblTrendStartDate);
@@ -1007,16 +1082,31 @@
             this.groupBoxTrendFilter.TabStop = false;
             this.groupBoxTrendFilter.Text = "查询条件";
             
+            // lblTrendCategory
+            this.lblTrendCategory.AutoSize = true;
+            this.lblTrendCategory.Location = new Point(15, 30);
+            this.lblTrendCategory.Name = "lblTrendCategory";
+            this.lblTrendCategory.Size = new Size(68, 17);
+            this.lblTrendCategory.Text = "物品分类:";
+            
+            // comboBoxTrendCategory
+            this.comboBoxTrendCategory.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.comboBoxTrendCategory.Location = new Point(90, 27);
+            this.comboBoxTrendCategory.Name = "comboBoxTrendCategory";
+            this.comboBoxTrendCategory.Size = new Size(150, 25);
+            this.comboBoxTrendCategory.Items.Add("全部分类");
+            this.comboBoxTrendCategory.SelectedIndex = 0;
+            
             // lblTrendItem
             this.lblTrendItem.AutoSize = true;
-            this.lblTrendItem.Location = new Point(15, 30);
+            this.lblTrendItem.Location = new Point(255, 30);
             this.lblTrendItem.Name = "lblTrendItem";
             this.lblTrendItem.Size = new Size(68, 17);
             this.lblTrendItem.Text = "物品名称:";
             
             // comboBoxTrendItem
             this.comboBoxTrendItem.DropDownStyle = ComboBoxStyle.DropDown;
-            this.comboBoxTrendItem.Location = new Point(90, 27);
+            this.comboBoxTrendItem.Location = new Point(330, 27);
             this.comboBoxTrendItem.Name = "comboBoxTrendItem";
             this.comboBoxTrendItem.Size = new Size(200, 25);
             this.comboBoxTrendItem.Items.Add("全部物品");
@@ -1024,28 +1114,28 @@
             
             // lblTrendStartDate
             this.lblTrendStartDate.AutoSize = true;
-            this.lblTrendStartDate.Location = new Point(310, 30);
+            this.lblTrendStartDate.Location = new Point(550, 30);
             this.lblTrendStartDate.Name = "lblTrendStartDate";
             this.lblTrendStartDate.Size = new Size(68, 17);
             this.lblTrendStartDate.Text = "开始日期:";
             
             // dateTimePickerTrendStart
             this.dateTimePickerTrendStart.Format = DateTimePickerFormat.Short;
-            this.dateTimePickerTrendStart.Location = new Point(385, 27);
+            this.dateTimePickerTrendStart.Location = new Point(625, 27);
             this.dateTimePickerTrendStart.Name = "dateTimePickerTrendStart";
             this.dateTimePickerTrendStart.Size = new Size(120, 23);
             this.dateTimePickerTrendStart.Value = DateTime.Now.AddDays(-7);
             
             // lblTrendEndDate
             this.lblTrendEndDate.AutoSize = true;
-            this.lblTrendEndDate.Location = new Point(520, 30);
+            this.lblTrendEndDate.Location = new Point(760, 30);
             this.lblTrendEndDate.Name = "lblTrendEndDate";
             this.lblTrendEndDate.Size = new Size(68, 17);
             this.lblTrendEndDate.Text = "结束日期:";
             
             // dateTimePickerTrendEnd
             this.dateTimePickerTrendEnd.Format = DateTimePickerFormat.Short;
-            this.dateTimePickerTrendEnd.Location = new Point(595, 27);
+            this.dateTimePickerTrendEnd.Location = new Point(835, 27);
             this.dateTimePickerTrendEnd.Name = "dateTimePickerTrendEnd";
             this.dateTimePickerTrendEnd.Size = new Size(120, 23);
             this.dateTimePickerTrendEnd.Value = DateTime.Now;
@@ -1191,6 +1281,15 @@
         private Button btnRefreshItems;
         private Label lblItemList;
         
+        // AI配置显示控件
+        private GroupBox groupBoxAIStatus;
+        private Label lblAIStatusTitle;
+        private Label lblAIModeStatus;
+        private Label lblAIWeightsStatus;
+        private Label lblAIAutoStatus;
+        private Label lblAISafetyStatus;
+        private Label lblAINote;
+        
         
         private GroupBox groupBoxTradingSettings;
         private Label lblMaxInvestment;
@@ -1221,7 +1320,6 @@
         private TextBox textBoxHistoryItemName;
         private Button btnHistorySearch;
         private Button btnHistoryReset;
-        private Button btnAddTestData;
         
         private GroupBox groupBoxHistoryList;
         private ListView listViewHistory;
@@ -1238,6 +1336,8 @@
         // 价格趋势分析Tab页控件
         private TabPage tabPagePriceTrend;
         private GroupBox groupBoxTrendFilter;
+        private Label lblTrendCategory;
+        private ComboBox comboBoxTrendCategory;
         private Label lblTrendItem;
         private ComboBox comboBoxTrendItem;
         private Label lblTrendStartDate;

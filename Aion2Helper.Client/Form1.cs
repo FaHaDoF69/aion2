@@ -11,6 +11,8 @@ namespace Aion2Helper
     {
         private readonly ImageDetectionService _imageService;
         private readonly GameWindowService _windowService;
+        private readonly AIConfigurationService _aiConfigService;
+        private AIConfiguration? _currentAIConfig;
         private bool _isMonitoring = false;
         private DateTime _startTime;
         private System.Windows.Forms.Timer _runtimeTimer;
@@ -33,6 +35,7 @@ namespace Aion2Helper
             
             _windowService = new GameWindowService();
             _imageService = new ImageDetectionService(_windowService);
+            _aiConfigService = new AIConfigurationService();
             
             InitializeTimers();
             InitializeListView();
@@ -96,13 +99,98 @@ namespace Aion2Helper
         {
             AddLog("Aion 2 拍卖行智能辅助系统已启动");
             
+            // 检查机器授权
+            var authResult = await CheckMachineAuthorizationAsync();
+            if (!authResult)
+            {
+                AddLog("程序将在3秒后关闭...");
+                await Task.Delay(3000);
+                Application.Exit();
+                return;
+            }
+            
             // 检查数据库连接并加载监控物品
             await CheckDatabaseAndLoadItemsAsync();
+            
+            // 加载AI配置
+            await LoadAIConfigurationAsync();
             
             // 加载交易历史数据
             await LoadPurchaseHistoryAsync();
             
+            // 初始化缓存服务
+            await InitializeCacheServiceAsync();
+            
             AddLog("请点击'开始监控'按钮开始监控拍卖行");
+        }
+
+        /// <summary>
+        /// 检查机器授权
+        /// </summary>
+        private async Task<bool> CheckMachineAuthorizationAsync()
+        {
+            try
+            {
+                AddLog("正在验证机器授权...");
+                
+                using var context = new Aion2Helper.Data.Aion2DbContext();
+                using var authService = new Aion2Helper.Services.MachineAuthorizationService(context);
+                
+                var result = await authService.CheckCurrentMachineAuthorizationAsync();
+                
+                if (result.IsAuthorized)
+                {
+                    AddLog($"✓ 授权验证成功");
+                    AddLog($"  机器码: {result.MachineCode}");
+                    if (result.Authorization?.MachineName != null)
+                    {
+                        AddLog($"  机器名称: {result.Authorization.MachineName}");
+                    }
+                    if (result.Authorization?.EndTime.HasValue == true)
+                    {
+                        AddLog($"  授权有效期至: {result.Authorization.EndTime.Value:yyyy-MM-dd HH:mm:ss}");
+                    }
+                    
+                    #if DEBUG
+                    Aion2Helper.Program.LogSuccess("授权", "机器授权验证成功");
+                    #endif
+                    
+                    return true;
+                }
+                else
+                {
+                    AddLog($"✗ 授权验证失败: {result.Message}");
+                    AddLog($"  机器码: {result.MachineCode}");
+                    
+                    #if DEBUG
+                    Aion2Helper.Program.LogError("授权", $"验证失败: {result.Message}");
+                    #endif
+                    
+                    MessageBox.Show(
+                        $"授权验证失败！\n\n{result.Message}\n\n机器码: {result.MachineCode}\n\n请联系管理员添加授权。",
+                        "授权失败",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog($"✗ 授权检查异常: {ex.Message}");
+                
+                #if DEBUG
+                Aion2Helper.Program.LogError("授权", $"检查异常: {ex.Message}");
+                #endif
+                
+                MessageBox.Show(
+                    $"授权检查失败！\n\n错误: {ex.Message}\n\n程序无法启动。",
+                    "错误",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                
+                return false;
+            }
         }
 
         /// <summary>
@@ -154,6 +242,112 @@ namespace Aion2Helper
         }
 
         /// <summary>
+        /// 加载AI配置
+        /// </summary>
+        private async Task LoadAIConfigurationAsync()
+        {
+            try
+            {
+                if (!_databaseConnected)
+                {
+                    AddLog("⚠ 数据库未连接，跳过AI配置加载");
+                    return;
+                }
+
+                AddLog("正在加载AI配置...");
+                
+                string machineCode = MachineCodeHelper.GetMachineCode();
+                _currentAIConfig = await _aiConfigService.GetConfigurationByMachineCodeAsync(machineCode);
+                
+                if (_currentAIConfig == null)
+                {
+                    // 创建默认配置
+                    _currentAIConfig = AIConfigurationService.CreateDefaultConfiguration(machineCode);
+                    AddLog($"✓ 使用默认AI配置 (模式: {_currentAIConfig.AIMode})");
+                }
+                else
+                {
+                    AddLog($"✓ AI配置加载成功 (模式: {_currentAIConfig.AIMode})");
+                    AddLog($"  权重分配: 价格{_currentAIConfig.PriceWeight}% | 市场{_currentAIConfig.MarketWeight}% | 盈利{_currentAIConfig.ProfitWeight}% | 时机{_currentAIConfig.TimingWeight}% | 历史{_currentAIConfig.HistoryWeight}%");
+                    
+                    if (_currentAIConfig.AutoBuyEnabled)
+                    {
+                        AddLog($"  ⚠ 已启用自动购买 (AI得分≥{_currentAIConfig.AutoBuyMinScore}分)");
+                    }
+                }
+
+                #if DEBUG
+                Aion2Helper.Program.LogSuccess("AI配置", $"加载完成 - 模式: {_currentAIConfig.AIMode}");
+                #endif
+                
+                // 更新AI配置显示
+                UpdateAIConfigurationDisplay();
+            }
+            catch (Exception ex)
+            {
+                AddLog($"✗ AI配置加载失败: {ex.Message}");
+                
+                // 使用默认配置
+                _currentAIConfig = AIConfigurationService.CreateDefaultConfiguration(MachineCodeHelper.GetMachineCode());
+                AddLog("使用默认AI配置");
+                
+                // 更新AI配置显示
+                UpdateAIConfigurationDisplay();
+                
+                #if DEBUG
+                Aion2Helper.Program.LogError("AI配置", $"加载失败，使用默认配置: {ex.Message}");
+                #endif
+            }
+        }
+
+        /// <summary>
+        /// 更新AI配置显示
+        /// </summary>
+        private void UpdateAIConfigurationDisplay()
+        {
+            try
+            {
+                if (_currentAIConfig == null)
+                {
+                    lblAIModeStatus.Text = "AI模式: 未配置（使用默认配置）";
+                    lblAIWeightsStatus.Text = "权重分配: 未配置";
+                    lblAIAutoStatus.Text = "自动购买: 未配置";
+                    lblAISafetyStatus.Text = "安全限制: 未配置";
+                    lblAIModeStatus.ForeColor = Color.Gray;
+                    return;
+                }
+
+                // 显示AI模式
+                lblAIModeStatus.Text = $"AI模式: {_currentAIConfig.AIMode}";
+                lblAIModeStatus.ForeColor = _currentAIConfig.AIMode == "不使用AI" ? Color.Gray : Color.DarkGreen;
+
+                // 显示权重分配
+                lblAIWeightsStatus.Text = $"权重分配: 价格{_currentAIConfig.PriceWeight}% | 市场{_currentAIConfig.MarketWeight}% | 盈利{_currentAIConfig.ProfitWeight}% | 时机{_currentAIConfig.TimingWeight}% | 历史{_currentAIConfig.HistoryWeight}%";
+                lblAIWeightsStatus.ForeColor = Color.DarkBlue;
+
+                // 显示自动购买设置
+                if (_currentAIConfig.AutoBuyEnabled)
+                {
+                    lblAIAutoStatus.Text = $"自动购买: ✅ 已启用 (AI得分≥{_currentAIConfig.AutoBuyMinScore}分自动购买, <{_currentAIConfig.AutoIgnoreMaxScore}分自动忽略)";
+                    lblAIAutoStatus.ForeColor = Color.DarkOrange;
+                }
+                else
+                {
+                    lblAIAutoStatus.Text = "自动购买: ❌ 未启用";
+                    lblAIAutoStatus.ForeColor = Color.Gray;
+                }
+
+                // 显示安全限制
+                lblAISafetyStatus.Text = $"安全限制: 单次最大投入{_currentAIConfig.MaxSingleInvestment:N0}金币 | 人工确认金额{_currentAIConfig.RequireManualConfirmAmount:N0}金币 | AI黑名单{(_currentAIConfig.EnableAIBlacklist ? "✅启用" : "❌禁用")}";
+                lblAISafetyStatus.ForeColor = Color.DarkSlateGray;
+            }
+            catch (Exception ex)
+            {
+                AddLog($"更新AI配置显示失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// 加载监控物品
         /// </summary>
         private async Task LoadMonitoredItemsWithMachineCodeFixAsync()
@@ -167,8 +361,9 @@ namespace Aion2Helper
                 
                 AddLog($"  当前机器码: {currentMachineCode}");
                 
-                // 直接用完整机器码查询
+                // 直接用完整机器码查询，并包含分类信息
                 _monitoredItems = await context.MonitoredItems
+                    .Include(x => x.ItemCategory)
                     .Where(x => x.MachineCode == currentMachineCode && x.IsEnabled)
                     .ToListAsync();
                 
@@ -217,7 +412,9 @@ namespace Aion2Helper
                 foreach (var item in _monitoredItems.OrderByDescending(x => x.Priority))
                 {
                     var listItem = new ListViewItem(item.ItemName);
-                    listItem.SubItems.Add(item.Category);
+#pragma warning disable CS0618
+                    listItem.SubItems.Add(item.ItemCategory?.Name ?? item.Category ?? "-");
+#pragma warning restore CS0618
                     listItem.SubItems.Add(item.ItemLevel?.ToString() ?? "-");                                 // 物品等级
                     listItem.SubItems.Add(item.TargetMinPrice?.ToString("N0") ?? "未设置");
                     listItem.SubItems.Add(item.TargetMaxPrice?.ToString("N0") ?? "未设置");
@@ -441,26 +638,48 @@ namespace Aion2Helper
                 {
                     var newItem = editForm.EditedItem;
                     
-                    // 检查是否已存在该物品
-                    using var service = new MonitoredItemService();
-                    var existingItems = await service.GetCurrentMachineMonitoredItemsAsync(true);
-                    if (existingItems.Any(x => x.ItemName.Equals(newItem.ItemName, StringComparison.OrdinalIgnoreCase)))
+                    AddLog($"正在保存监控物品: {newItem.ItemName}...");
+                    
+                    // 异步保存到数据库
+                    await Task.Run(async () =>
                     {
-                        MessageBox.Show("该物品已在监控列表中！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        return;
-                    }
-                    
-                    // 保存到数据库
-                    var savedItem = await service.AddMonitoredItemAsync(newItem);
-                    
-                    AddLog($"✓ 成功添加监控物品: {savedItem.ItemName}");
-                    
-                    #if DEBUG
-                    Aion2Helper.Program.LogSuccess("数据库", $"添加监控物品: {savedItem.ItemName} (ID: {savedItem.Id})");
-                    #endif
-                    
-                    // 刷新列表
-                    await LoadMonitoredItemsWithMachineCodeFixAsync();
+                        // 检查是否已存在该物品
+                        using var service = new MonitoredItemService();
+                        var existingItems = await service.GetCurrentMachineMonitoredItemsAsync(true);
+                        if (existingItems.Any(x => x.ItemName.Equals(newItem.ItemName, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            // 在UI线程显示消息
+                            Invoke(new Action(() =>
+                            {
+                                MessageBox.Show("该物品已在监控列表中！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            }));
+                            return null;
+                        }
+                        
+                        // 保存到数据库
+                        var savedItem = await service.AddMonitoredItemAsync(newItem);
+                        return savedItem;
+                    }).ContinueWith(task =>
+                    {
+                        if (task.IsFaulted)
+                        {
+                            throw task.Exception?.InnerException ?? task.Exception!;
+                        }
+                        
+                        var savedItem = task.Result;
+                        if (savedItem != null)
+                        {
+                            AddLog($"✓ 成功添加监控物品: {savedItem.ItemName}");
+                            
+                            #if DEBUG
+                            Aion2Helper.Program.LogSuccess("数据库", $"添加监控物品: {savedItem.ItemName} (ID: {savedItem.Id})");
+                            #endif
+                            
+                            // 刷新列表
+                            return LoadMonitoredItemsWithMachineCodeFixAsync();
+                        }
+                        return Task.CompletedTask;
+                    }, TaskScheduler.FromCurrentSynchronizationContext()).Unwrap();
                 }
             }
             catch (Exception ex)
@@ -696,18 +915,31 @@ namespace Aion2Helper
                 {
                     var editedItem = editForm.EditedItem;
                     
-                    // 更新到数据库
-                    using var service = new MonitoredItemService();
-                    var updatedItem = await service.UpdateMonitoredItemAsync(editedItem);
+                    AddLog($"正在更新监控物品: {editedItem.ItemName}...");
                     
-                    AddLog($"✓ 成功更新监控物品: {updatedItem.ItemName}");
-                    
-                    #if DEBUG
-                    Aion2Helper.Program.LogSuccess("数据库", $"更新监控物品: {updatedItem.ItemName} (ID: {updatedItem.Id})");
-                    #endif
-                    
-                    // 刷新列表
-                    await LoadMonitoredItemsWithMachineCodeFixAsync();
+                    // 异步更新到数据库
+                    await Task.Run(async () =>
+                    {
+                        using var service = new MonitoredItemService();
+                        var updatedItem = await service.UpdateMonitoredItemAsync(editedItem);
+                        return updatedItem;
+                    }).ContinueWith(task =>
+                    {
+                        if (task.IsFaulted)
+                        {
+                            throw task.Exception?.InnerException ?? task.Exception!;
+                        }
+                        
+                        var updatedItem = task.Result;
+                        AddLog($"✓ 成功更新监控物品: {updatedItem.ItemName}");
+                        
+                        #if DEBUG
+                        Aion2Helper.Program.LogSuccess("数据库", $"更新监控物品: {updatedItem.ItemName} (ID: {updatedItem.Id})");
+                        #endif
+                        
+                        // 刷新列表
+                        return LoadMonitoredItemsWithMachineCodeFixAsync();
+                    }, TaskScheduler.FromCurrentSynchronizationContext()).Unwrap();
                 }
             }
             catch (Exception ex)
@@ -1024,6 +1256,13 @@ namespace Aion2Helper
                 foreach (var opportunity in opportunities)
                 {
                     var item = new ListViewItem(opportunity.ItemName);
+                    
+                    // 从缓存中查找分类
+                    var cache = CacheService.Instance;
+                    var monitoredItem = cache.GetMonitoredItemsByName(opportunity.ItemName).FirstOrDefault();
+                    var categoryName = monitoredItem?.ItemCategory?.Name ?? "-";
+                    
+                    item.SubItems.Add(categoryName);                                                          // 物品分类
                     item.SubItems.Add(opportunity.ItemLevel?.ToString() ?? "-");                               // 物品等级
                     item.SubItems.Add(opportunity.CurrentPrice.ToString("N0"));                               // 当前价格
                     item.SubItems.Add(opportunity.ExpectedPrice.ToString("N0"));                              // 预期价格
@@ -1288,6 +1527,12 @@ namespace Aion2Helper
                 await LoadHistoryPageAsync(1);
 
                 AddLog("✓ 交易历史数据加载完成");
+                
+                // 如果没有数据，显示提示
+                if (listViewHistory.Items.Count == 0)
+                {
+                    AddLog("💡 提示: 交易历史为空，等待实际交易数据记录");
+                }
 
                 #if DEBUG
                 Aion2Helper.Program.LogSuccess("交易历史", "数据加载完成");
@@ -1324,8 +1569,7 @@ namespace Aion2Helper
                 
                 if (totalCount == 0)
                 {
-                    AddLog("⚠ 数据库中没有任何交易记录，请先添加一些测试数据");
-                    AddLog("💡 提示: 可以运行 SQL/sample_purchase_records_data.sql 中的示例数据");
+                    AddLog("⚠ 数据库中没有任何交易记录");
                 }
                 else if (currentMachineCount == 0)
                 {
@@ -1372,9 +1616,6 @@ namespace Aion2Helper
             
             // 重置按钮事件
             btnHistoryReset.Click += BtnHistoryReset_Click;
-            
-            // 添加测试数据按钮事件
-            btnAddTestData.Click += BtnAddTestData_Click;
             
             // 分页按钮事件
             btnHistoryFirst.Click += BtnHistoryFirst_Click;
@@ -1466,6 +1707,7 @@ namespace Aion2Helper
                 {
                     var item = new ListViewItem(record.PurchaseTime.ToString("yyyy-MM-dd HH:mm:ss"));
                     item.SubItems.Add(record.ItemName);
+                    item.SubItems.Add(record.ItemCategory?.Name ?? "-");
                     item.SubItems.Add(record.Price.ToString("N0"));
                     item.SubItems.Add(record.Quantity.ToString());
                     item.SubItems.Add(record.TotalAmount.ToString("N0"));
@@ -1581,310 +1823,6 @@ namespace Aion2Helper
         }
 
         /// <summary>
-        /// 添加测试数据按钮点击事件
-        /// </summary>
-        private async void BtnAddTestData_Click(object? sender, EventArgs e)
-        {
-            var result = MessageBox.Show(
-                "确定要添加测试数据吗？\n\n这将向数据库中添加：\n• 约12条示例交易记录\n• 约8条监控机会记录\n\n用于测试交易历史和监控功能。", 
-                "添加测试数据", 
-                MessageBoxButtons.YesNo, 
-                MessageBoxIcon.Question);
-            
-            if (result == DialogResult.Yes)
-            {
-                await AddTestPurchaseRecordsAsync();
-                await AddTestMonitoringOpportunitiesAsync();
-            }
-        }
-
-        /// <summary>
-        /// 添加测试监控机会记录
-        /// </summary>
-        private async Task AddTestMonitoringOpportunitiesAsync()
-        {
-            try
-            {
-                AddLog("正在添加测试监控机会数据...");
-                
-                // 添加一些测试监控机会
-                await AddMonitoringOpportunityAsync("传说武器强化石", 3, 850000, 1200000, "捡漏", RiskLevel.Low, "玩家A");
-                await AddMonitoringOpportunityAsync("史诗防具碎片", 2, 450000, 600000, "套利", RiskLevel.Medium, "玩家B");
-                await AddMonitoringOpportunityAsync("稀有材料包", 2, 120000, 180000, "趋势", RiskLevel.Low, "玩家C");
-                await AddMonitoringOpportunityAsync("魔法水晶", 1, 75000, 95000, "批量", RiskLevel.Low, "玩家D");
-                await AddMonitoringOpportunityAsync("装备碎片", 2, 200000, 280000, "捡漏", RiskLevel.Medium, "玩家E");
-                await AddMonitoringOpportunityAsync("强化石", 2, 300000, 350000, "套利", RiskLevel.Medium, "玩家F");
-                await AddMonitoringOpportunityAsync("宝石", 2, 500000, 750000, "捡漏", RiskLevel.Low, "玩家G");
-                await AddMonitoringOpportunityAsync("传说装备", 3, 1500000, 2000000, "捡漏", RiskLevel.High, "玩家H");
-
-                AddLog("✓ 成功添加 8 条测试监控机会记录");
-                
-                #if DEBUG
-                Aion2Helper.Program.LogSuccess("监控历史", "添加测试监控机会完成");
-                #endif
-            }
-            catch (Exception ex)
-            {
-                AddLog($"✗ 添加测试监控机会失败: {ex.Message}");
-                
-                #if DEBUG
-                Aion2Helper.Program.LogError("监控历史", $"添加测试监控机会失败: {ex.Message}");
-                #endif
-            }
-        }
-
-        /// <summary>
-        /// 添加测试交易记录
-        /// </summary>
-        private async Task AddTestPurchaseRecordsAsync()
-        {
-            try
-            {
-                AddLog("正在添加测试交易数据...");
-                
-                using var service = new Aion2Helper.Services.PurchaseHistoryService();
-                var currentMachineCode = MachineCodeHelper.GetMachineCode();
-                
-                // 创建测试数据
-                var testRecords = new List<PurchaseRecord>
-                {
-                    // 最近的成功交易
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "传说武器强化石",
-                        Price = 850000,
-                        Quantity = 1,
-                        TotalAmount = 850000,
-                        SellerName = "玩家A",
-                        ExpectedProfit = 350000,
-                        ActualProfit = 380000,
-                        Strategy = "捡漏",
-                        Status = PurchaseStatus.Completed,
-                        ExecutionTimeMs = 1250,
-                        Notes = "价格非常好",
-                        PurchaseTime = DateTime.Now.AddHours(-1)
-                    },
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "史诗防具碎片",
-                        Price = 450000,
-                        Quantity = 2,
-                        TotalAmount = 900000,
-                        SellerName = "玩家B",
-                        ExpectedProfit = 150000,
-                        ActualProfit = 140000,
-                        Strategy = "套利",
-                        Status = PurchaseStatus.Completed,
-                        ExecutionTimeMs = 980,
-                        Notes = "利润略低于预期",
-                        PurchaseTime = DateTime.Now.AddHours(-2)
-                    },
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "稀有材料包",
-                        Price = 120000,
-                        Quantity = 5,
-                        TotalAmount = 600000,
-                        SellerName = "玩家C",
-                        ExpectedProfit = 80000,
-                        ActualProfit = 95000,
-                        Strategy = "趋势",
-                        Status = PurchaseStatus.Completed,
-                        ExecutionTimeMs = 750,
-                        Notes = "市场价格上涨",
-                        PurchaseTime = DateTime.Now.AddHours(-3)
-                    },
-                    // 昨天的交易
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "魔法水晶",
-                        Price = 75000,
-                        Quantity = 10,
-                        TotalAmount = 750000,
-                        SellerName = "玩家D",
-                        ExpectedProfit = 25000,
-                        ActualProfit = 30000,
-                        Strategy = "批量",
-                        Status = PurchaseStatus.Completed,
-                        ExecutionTimeMs = 1100,
-                        Notes = "批量购买成功",
-                        PurchaseTime = DateTime.Now.AddDays(-1)
-                    },
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "装备碎片",
-                        Price = 200000,
-                        Quantity = 3,
-                        TotalAmount = 600000,
-                        SellerName = "玩家E",
-                        ExpectedProfit = 60000,
-                        ActualProfit = 55000,
-                        Strategy = "捡漏",
-                        Status = PurchaseStatus.Completed,
-                        ExecutionTimeMs = 890,
-                        Notes = "小幅盈利",
-                        PurchaseTime = DateTime.Now.AddDays(-1).AddHours(-2)
-                    },
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "强化石",
-                        Price = 300000,
-                        Quantity = 2,
-                        TotalAmount = 600000,
-                        SellerName = "玩家F",
-                        ExpectedProfit = 100000,
-                        ActualProfit = 0,
-                        Strategy = "套利",
-                        Status = PurchaseStatus.Failed,
-                        ExecutionTimeMs = 2300,
-                        Notes = "交易失败，网络问题",
-                        PurchaseTime = DateTime.Now.AddDays(-1).AddHours(-4)
-                    },
-                    // 前天的交易
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "宝石",
-                        Price = 500000,
-                        Quantity = 1,
-                        TotalAmount = 500000,
-                        SellerName = "玩家G",
-                        ExpectedProfit = 200000,
-                        ActualProfit = 220000,
-                        Strategy = "捡漏",
-                        Status = PurchaseStatus.Completed,
-                        ExecutionTimeMs = 650,
-                        Notes = "超预期收益",
-                        PurchaseTime = DateTime.Now.AddDays(-2)
-                    },
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "药水",
-                        Price = 15000,
-                        Quantity = 20,
-                        TotalAmount = 300000,
-                        SellerName = "玩家H",
-                        ExpectedProfit = 5000,
-                        ActualProfit = 8000,
-                        Strategy = "批量",
-                        Status = PurchaseStatus.Completed,
-                        ExecutionTimeMs = 1800,
-                        Notes = "消耗品投资",
-                        PurchaseTime = DateTime.Now.AddDays(-2).AddHours(-1)
-                    },
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "装备",
-                        Price = 800000,
-                        Quantity = 1,
-                        TotalAmount = 800000,
-                        SellerName = "玩家I",
-                        ExpectedProfit = 300000,
-                        ActualProfit = null,
-                        Strategy = "趋势",
-                        Status = PurchaseStatus.Executing,
-                        ExecutionTimeMs = 0,
-                        Notes = "正在执行中",
-                        PurchaseTime = DateTime.Now.AddDays(-2).AddHours(-3)
-                    },
-                    // 一周前的交易
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "传说装备",
-                        Price = 1500000,
-                        Quantity = 1,
-                        TotalAmount = 1500000,
-                        SellerName = "玩家J",
-                        ExpectedProfit = 500000,
-                        ActualProfit = 480000,
-                        Strategy = "捡漏",
-                        Status = PurchaseStatus.Completed,
-                        ExecutionTimeMs = 2100,
-                        Notes = "高价值交易",
-                        PurchaseTime = DateTime.Now.AddDays(-7)
-                    },
-                    // 待处理的交易
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "新物品",
-                        Price = 250000,
-                        Quantity = 2,
-                        TotalAmount = 500000,
-                        SellerName = "玩家R",
-                        ExpectedProfit = 80000,
-                        ActualProfit = null,
-                        Strategy = "测试",
-                        Status = PurchaseStatus.Pending,
-                        ExecutionTimeMs = 0,
-                        Notes = "等待处理",
-                        PurchaseTime = DateTime.Now.AddMinutes(-30)
-                    },
-                    new PurchaseRecord
-                    {
-                        MachineCode = currentMachineCode,
-                        ItemName = "测试物品",
-                        Price = 100000,
-                        Quantity = 1,
-                        TotalAmount = 100000,
-                        SellerName = "玩家S",
-                        ExpectedProfit = 30000,
-                        ActualProfit = null,
-                        Strategy = "测试",
-                        Status = PurchaseStatus.Pending,
-                        ExecutionTimeMs = 0,
-                        Notes = "测试交易",
-                        PurchaseTime = DateTime.Now.AddMinutes(-10)
-                    }
-                };
-
-                // 批量添加记录
-                int addedCount = 0;
-                foreach (var record in testRecords)
-                {
-                    try
-                    {
-                        await service.AddPurchaseRecordAsync(record);
-                        addedCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        AddLog($"添加记录失败: {record.ItemName} - {ex.Message}");
-                    }
-                }
-
-                AddLog($"✓ 成功添加 {addedCount} 条测试交易记录");
-                
-                // 重新加载数据
-                await LoadHistoryPageAsync(1);
-                
-                MessageBox.Show($"成功添加 {addedCount} 条测试数据！", "添加完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                #if DEBUG
-                Aion2Helper.Program.LogSuccess("交易历史", $"添加测试数据完成: {addedCount} 条记录");
-                #endif
-            }
-            catch (Exception ex)
-            {
-                AddLog($"✗ 添加测试数据失败: {ex.Message}");
-                MessageBox.Show($"添加测试数据失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                
-                #if DEBUG
-                Aion2Helper.Program.LogError("交易历史", $"添加测试数据失败: {ex.Message}");
-                #endif
-            }
-        }
-
-        /// <summary>
         /// 首页按钮点击事件
         /// </summary>
         private async void BtnHistoryFirst_Click(object? sender, EventArgs e)
@@ -1947,6 +1885,62 @@ namespace Aion2Helper
         #region 价格趋势分析
 
         /// <summary>
+        /// 初始化缓存服务
+        /// </summary>
+        private async Task InitializeCacheServiceAsync()
+        {
+            if (!_databaseConnected) return;
+
+            try
+            {
+                AddLog("正在初始化数据缓存...");
+                
+                var cache = CacheService.Instance;
+                await cache.InitializeAsync();
+                
+                AddLog($"✓ 缓存初始化完成");
+                AddLog($"  {cache.GetCacheStats()}");
+                
+                // 加载价格趋势分类数据
+                await LoadTrendCategoriesAsync();
+            }
+            catch (Exception ex)
+            {
+                AddLog($"✗ 缓存初始化失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 加载价格趋势分类数据（从缓存）
+        /// </summary>
+        private async Task LoadTrendCategoriesAsync()
+        {
+            try
+            {
+                var cache = CacheService.Instance;
+                var categories = cache.GetCategories();
+
+                comboBoxTrendCategory.Items.Clear();
+                comboBoxTrendCategory.Items.Add(new { Id = 0, Name = "全部分类" });
+                
+                foreach (var cat in categories)
+                {
+                    comboBoxTrendCategory.Items.Add(new { Id = cat.Id, Name = cat.Name });
+                }
+                
+                comboBoxTrendCategory.DisplayMember = "Name";
+                comboBoxTrendCategory.ValueMember = "Id";
+                comboBoxTrendCategory.SelectedIndex = 0;
+                
+                await Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                AddLog($"❌ 加载价格趋势分类失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// 初始化价格趋势图表
         /// </summary>
         private void InitializePriceTrendChart()
@@ -1974,6 +1968,7 @@ namespace Aion2Helper
 
                 btnAnalyzeTrend.Click += BtnAnalyzeTrend_Click;
                 btnRefreshTrendItems.Click += BtnRefreshTrendItems_Click;
+                comboBoxTrendCategory.SelectedIndexChanged += ComboBoxTrendCategory_SelectedIndexChanged;
             }
             catch (Exception ex)
             {
@@ -1996,28 +1991,67 @@ namespace Aion2Helper
 
                 btnAnalyzeTrend.Enabled = false;
                 btnAnalyzeTrend.Text = "⏳ 分析中...";
-                AddLog("🔍 开始分析价格趋势...");
-
-                var itemName = comboBoxTrendItem.Text == "全部物品" ? null : comboBoxTrendItem.Text;
+                
+                // 获取分类ID
+                int? categoryId = null;
+                string categoryDisplayName = "全部";
+                if (comboBoxTrendCategory.SelectedItem != null)
+                {
+                    dynamic selectedCategory = comboBoxTrendCategory.SelectedItem;
+                    int catId = selectedCategory.Id;
+                    if (catId > 0)
+                    {
+                        categoryId = catId;
+                        categoryDisplayName = selectedCategory.Name;
+                    }
+                }
+                
+                // 获取物品名称
+                string? itemName = null;
+                if (comboBoxTrendItem.SelectedItem != null)
+                {
+                    dynamic selectedItem = comboBoxTrendItem.SelectedItem;
+                    string itemValue = selectedItem.Value;
+                    if (!string.IsNullOrEmpty(itemValue))
+                    {
+                        itemName = itemValue;
+                    }
+                }
                 var startDate = dateTimePickerTrendStart.Value.Date;
                 var endDate = dateTimePickerTrendEnd.Value.Date.AddDays(1).AddSeconds(-1);
                 var startHour = (int)numericUpDownTrendStartHour.Value;
                 var endHour = (int)numericUpDownTrendEndHour.Value;
 
+                AddLog($"🔍 开始分析价格趋势...");
+                AddLog($"  分类: {categoryDisplayName} (ID={categoryId?.ToString() ?? "全部"})");
+                AddLog($"  物品: {itemName ?? "全部"}");
+                AddLog($"  日期: {startDate:yyyy-MM-dd} ~ {endDate:yyyy-MM-dd}");
+                AddLog($"  时间: {startHour}:00 ~ {endHour}:00");
+
                 using var context = new Aion2DbContext();
                 var service = new PriceTrendAnalysisService(context);
-                var trendData = await service.GetPriceTrendAsync(itemName, startDate, endDate, startHour, endHour);
+                var trendData = await service.GetPriceTrendAsync(itemName, startDate, endDate, startHour, endHour, categoryId);
+
+                AddLog($"✅ 查询到 {trendData.Count} 个数据点");
 
                 if (trendData.Count == 0)
                 {
                     AddLog("⚠️ 未找到符合条件的数据");
                     MessageBox.Show("未找到符合条件的价格数据！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    
+                    // 清空图表
+                    if (_trendChart != null)
+                    {
+                        _trendChart.Series.Clear();
+                    }
                     return;
                 }
 
+                AddLog($"📊 正在更新图表...");
                 UpdatePriceTrendChart(trendData);
+                AddLog($"✅ 图表更新完成");
 
-                var summary = await service.GetPriceSummaryAsync(itemName, startDate, endDate, startHour, endHour);
+                var summary = await service.GetPriceSummaryAsync(itemName, startDate, endDate, startHour, endHour, categoryId);
                 lblTrendSummary.Text = $"总记录: {summary.TotalCount} | 平均价格: {summary.AveragePrice:N0} | 最低: {summary.MinPrice:N0} | 最高: {summary.MaxPrice:N0} | 波动: {summary.PriceRange:N0}";
 
                 var trend = service.AnalyzePriceTrend(trendData);
@@ -2045,6 +2079,89 @@ namespace Aion2Helper
         }
 
         /// <summary>
+        /// 物品分类选择改变事件
+        /// </summary>
+        private async void ComboBoxTrendCategory_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            await LoadTrendItemsByCategory();
+        }
+
+        /// <summary>
+        /// 根据分类加载物品列表（从缓存的监控物品）
+        /// </summary>
+        private async Task LoadTrendItemsByCategory()
+        {
+            try
+            {
+                var cache = CacheService.Instance;
+                var currentMachineCode = MachineCodeHelper.GetMachineCode();
+
+                // 获取选中的分类ID
+                int? categoryId = null;
+                if (comboBoxTrendCategory.SelectedItem != null)
+                {
+                    dynamic selectedCategory = comboBoxTrendCategory.SelectedItem;
+                    int catId = selectedCategory.Id;
+                    if (catId > 0)
+                    {
+                        categoryId = catId;
+                    }
+                }
+                
+                #if DEBUG
+                Console.WriteLine($"[物品联动] 开始加载物品，分类ID={categoryId?.ToString() ?? "全部"}");
+                #endif
+                
+                // 从缓存的监控物品中获取
+                List<MonitoredItem> monitoredItems;
+                if (!categoryId.HasValue)
+                {
+                    monitoredItems = cache.GetMonitoredItemsByMachine(currentMachineCode);
+                }
+                else
+                {
+                    monitoredItems = cache.GetMonitoredItemsByMachine(currentMachineCode)
+                        .Where(m => m.CategoryId == categoryId.Value)
+                        .ToList();
+                }
+
+                var items = monitoredItems
+                    .Select(m => m.ItemName)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToList();
+
+                #if DEBUG
+                Console.WriteLine($"[物品联动] 从缓存中找到 {items.Count} 个物品");
+                if (items.Count > 0)
+                {
+                    Console.WriteLine($"  物品列表: {string.Join(", ", items)}");
+                }
+                #endif
+
+                comboBoxTrendItem.Items.Clear();
+                comboBoxTrendItem.Items.Add(new { Name = "全部物品", Value = "" });
+                
+                foreach (var itemName in items)
+                {
+                    comboBoxTrendItem.Items.Add(new { Name = itemName, Value = itemName });
+                }
+                
+                comboBoxTrendItem.DisplayMember = "Name";
+                comboBoxTrendItem.ValueMember = "Value";
+                comboBoxTrendItem.SelectedIndex = 0;
+                
+                AddLog($"✅ 加载了 {items.Count} 个物品");
+                
+                await Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                AddLog($"❌ 加载物品列表失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// 刷新物品列表按钮
         /// </summary>
         private async void BtnRefreshTrendItems_Click(object? sender, EventArgs e)
@@ -2057,22 +2174,22 @@ namespace Aion2Helper
                     return;
                 }
 
-                AddLog("🔄 刷新物品列表...");
+                AddLog("🔄 刷新数据...");
 
-                using var context = new Aion2DbContext();
-                var service = new PriceTrendAnalysisService(context);
-                var items = await service.GetDistinctItemNamesAsync();
+                // 刷新缓存
+                var cache = CacheService.Instance;
+                await cache.RefreshAllAsync();
+                
+                AddLog($"  {cache.GetCacheStats()}");
 
-                comboBoxTrendItem.Items.Clear();
-                comboBoxTrendItem.Items.Add("全部物品");
-                comboBoxTrendItem.Items.AddRange(items.ToArray());
-                comboBoxTrendItem.SelectedIndex = 0;
+                // 重新加载分类和物品列表
+                await LoadTrendCategoriesAsync();
 
-                AddLog($"✅ 加载了 {items.Count} 个物品");
+                AddLog($"✅ 刷新完成");
             }
             catch (Exception ex)
             {
-                AddLog($"❌ 刷新物品列表失败: {ex.Message}");
+                AddLog($"❌ 刷新失败: {ex.Message}");
             }
         }
 
@@ -2117,12 +2234,37 @@ namespace Aion2Helper
                 _trendChart.Series.Add(minSeries);
                 _trendChart.Series.Add(maxSeries);
 
+                // 重置缩放
+                _trendChart.ChartAreas[0].AxisX.ScaleView.ZoomReset();
+                _trendChart.ChartAreas[0].AxisY.ScaleView.ZoomReset();
+                
+                // 设置X轴范围（确保显示所有数据点）
+                if (trendData.Count > 0)
+                {
+                    var minDate = trendData.Min(d => d.DateTime);
+                    var maxDate = trendData.Max(d => d.DateTime);
+                    
+                    _trendChart.ChartAreas[0].AxisX.Minimum = minDate.ToOADate();
+                    _trendChart.ChartAreas[0].AxisX.Maximum = maxDate.ToOADate();
+                    
+                    #if DEBUG
+                    Console.WriteLine($"[图表X轴] 设置范围: {minDate:yyyy-MM-dd HH:mm} ~ {maxDate:yyyy-MM-dd HH:mm}");
+                    #endif
+                }
+                
                 _trendChart.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
                 _trendChart.ChartAreas[0].AxisY.ScaleView.Zoomable = true;
                 _trendChart.ChartAreas[0].CursorX.IsUserEnabled = true;
                 _trendChart.ChartAreas[0].CursorX.IsUserSelectionEnabled = true;
                 _trendChart.ChartAreas[0].CursorY.IsUserEnabled = true;
                 _trendChart.ChartAreas[0].CursorY.IsUserSelectionEnabled = true;
+                
+                // 强制刷新图表
+                _trendChart.Invalidate();
+                
+                #if DEBUG
+                Console.WriteLine($"[图表更新] 添加了 {trendData.Count} 个数据点到图表");
+                #endif
             }
             catch (Exception ex)
             {
