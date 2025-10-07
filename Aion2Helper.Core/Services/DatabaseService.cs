@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Aion2Helper.Data;
 using Aion2Helper.Models;
 using Aion2Helper.Utils;
@@ -53,7 +53,7 @@ public class DatabaseService : IDisposable
         {
             // 记录错误日志
             #if DEBUG
-            Aion2Helper.Program.LogError("数据库", $"初始化失败: {ex.Message}");
+            Logger.LogError("数据库", $"初始化失败: {ex.Message}");
             #endif
             return false;
         }

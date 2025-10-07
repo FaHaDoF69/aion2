@@ -1,3 +1,12 @@
 /bin
 /obj
 /.vs
+/Aion2Helper.Admin/bin
+/Aion2Helper.Admin/obj
+/Aion2Helper.Client/obj
+/Aion2Helper.Client/bin
+/Aion2Helper.Core/obj
+/Aion2Helper.Core/bin
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat

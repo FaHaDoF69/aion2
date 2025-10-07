@@ -1,18 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Compile Update="Aion2Helper.Admin\AdminMainForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Update="Aion2Helper.Client\Form1.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Update="Aion2Helper.Client\Forms\MonitoredItemEditForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Update="Aion2Helper.Client\Forms\PriceTrendAnalysisForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
     <Compile Update="Form1.cs">
       <SubType>Form</SubType>
     </Compile>

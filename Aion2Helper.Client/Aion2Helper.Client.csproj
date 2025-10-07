@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Aion2Helper</RootNamespace>
+    <AssemblyName>Aion2Helper</AssemblyName>
+    <PackageId>Aion2Helper.Client</PackageId>
+    <Product>Aion2 Helper - 用户端</Product>
+    <Company>Aion2 Helper</Company>
+    <Copyright>Copyright (C) 2024</Copyright>
+    <Version>1.0.0.0</Version>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Windows.Forms.DataVisualization" Version="1.0.0-prerelease.20110.1" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
+  </ItemGroup>
+
+  <!-- 自动复制 images 目录到输出目录 -->
+  <ItemGroup>
+    <Content Include="images\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\Aion2Helper.Core\Aion2Helper.Core.csproj" />
+  </ItemGroup>
+
+</Project>

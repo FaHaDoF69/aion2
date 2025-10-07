@@ -37,6 +37,17 @@ public class PurchaseRecord
     public string ItemName { get; set; } = string.Empty;
 
     /// <summary>
+    /// 物品分类ID
+    /// </summary>
+    [Column("category_id")]
+    public int? CategoryId { get; set; }
+
+    /// <summary>
+    /// 物品分类导航属性
+    /// </summary>
+    public ItemCategory? ItemCategory { get; set; }
+
+    /// <summary>
     /// 购买价格
     /// </summary>
     [Column("price")]

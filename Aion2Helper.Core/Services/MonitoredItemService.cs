@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Aion2Helper.Data;
 using Aion2Helper.Models;
 using Aion2Helper.Utils;
@@ -132,7 +132,7 @@ public class MonitoredItemService : IDisposable
         {
             // 调试信息：显示查询参数
             #if DEBUG
-            Aion2Helper.Program.LogInfo("数据库", $"查询监控物品 - 机器码: {_currentMachineCode}, 包含禁用: {includeDisabled}");
+            Logger.LogInfo("数据库", $"查询监控物品 - 机器码: {_currentMachineCode}, 包含禁用: {includeDisabled}");
             #endif
             
             var query = _context.MonitoredItems
@@ -149,14 +149,14 @@ public class MonitoredItemService : IDisposable
                 .ToListAsync();
             
             #if DEBUG
-            Aion2Helper.Program.LogSuccess("数据库", $"查询结果: {result.Count} 个物品");
+            Logger.LogInfo("数据库", $"查询结果: {result.Count} 个物品");
             #endif
             return result;
         }
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("数据库", $"查询监控物品异常: {ex.Message}");
+            Logger.LogError("数据库", $"查询监控物品异常: {ex.Message}");
             #endif
             throw;
         }
@@ -224,7 +224,8 @@ public class MonitoredItemService : IDisposable
     public async Task<List<MonitoredItem>> GetMonitoredItemsByCategoryAsync(string category)
     {
         return await _context.MonitoredItems
-            .Where(x => x.MachineCode == _currentMachineCode && x.Category == category)
+            .Include(x => x.ItemCategory)
+            .Where(x => x.MachineCode == _currentMachineCode && x.ItemCategory != null && x.ItemCategory.Name == category)
             .OrderByDescending(x => x.Priority)
             .ThenBy(x => x.ItemName)
             .ToListAsync();
@@ -238,8 +239,9 @@ public class MonitoredItemService : IDisposable
     public async Task<List<string>> GetAllCategoriesAsync()
     {
         return await _context.MonitoredItems
-            .Where(x => x.MachineCode == _currentMachineCode && !string.IsNullOrEmpty(x.Category))
-            .Select(x => x.Category)
+            .Include(x => x.ItemCategory)
+            .Where(x => x.MachineCode == _currentMachineCode && x.ItemCategory != null)
+            .Select(x => x.ItemCategory!.Name)
             .Distinct()
             .OrderBy(x => x)
             .ToListAsync();
@@ -410,8 +412,8 @@ public class MonitoredItemService : IDisposable
             AutoPurchaseEnabledCount = items.Count(x => x.AutoPurchaseEnabled),
             TotalFoundCount = items.Sum(x => x.TotalFoundCount),
             TotalPurchaseCount = items.Sum(x => x.TotalPurchaseCount),
-            CategoryCount = items.Where(x => !string.IsNullOrEmpty(x.Category))
-                               .Select(x => x.Category)
+            CategoryCount = items.Where(x => x.CategoryId.HasValue)
+                               .Select(x => x.CategoryId)
                                .Distinct()
                                .Count(),
             HighPriorityCount = items.Count(x => x.Priority >= 8),

@@ -121,18 +121,6 @@ public class MonitoringHistory
     public DateTime? ProcessedAt { get; set; }
 
     /// <summary>
-    /// 关联的购买记录ID（如果已购买）
-    /// </summary>
-    [Column("purchase_record_id")]
-    public long? PurchaseRecordId { get; set; }
-
-    /// <summary>
-    /// 监控规则ID（关联到监控物品）
-    /// </summary>
-    [Column("monitored_item_id")]
-    public long? MonitoredItemId { get; set; }
-
-    /// <summary>
     /// 价格偏差（相对于预期价格的偏差百分比）
     /// </summary>
     [Column("price_deviation")]
@@ -151,18 +139,6 @@ public class MonitoringHistory
     [Column("notes")]
     [MaxLength(500)]
     public string? Notes { get; set; }
-
-    /// <summary>
-    /// 关联的监控物品（导航属性）
-    /// </summary>
-    [ForeignKey("MonitoredItemId")]
-    public virtual MonitoredItem? MonitoredItem { get; set; }
-
-    /// <summary>
-    /// 关联的购买记录（导航属性）
-    /// </summary>
-    [ForeignKey("PurchaseRecordId")]
-    public virtual PurchaseRecord? PurchaseRecord { get; set; }
 
     public override string ToString()
     {

@@ -30,6 +30,26 @@ public class Aion2DbContext : DbContext
     public DbSet<MonitoringHistory> MonitoringHistory { get; set; }
 
     /// <summary>
+    /// 物品分类数据集
+    /// </summary>
+    public DbSet<ItemCategory> ItemCategories { get; set; }
+
+    /// <summary>
+    /// 物品数据集
+    /// </summary>
+    public DbSet<Item> Items { get; set; }
+
+    /// <summary>
+    /// 机器授权数据集
+    /// </summary>
+    public DbSet<MachineAuthorization> MachineAuthorizations { get; set; }
+
+    /// <summary>
+    /// AI配置数据集
+    /// </summary>
+    public DbSet<AIConfiguration> AIConfigurations { get; set; }
+
+    /// <summary>
     /// 构造函数
     /// </summary>
     public Aion2DbContext() : base()
@@ -172,16 +192,25 @@ public class Aion2DbContext : DbContext
             entity.Property(e => e.Status)
                 .HasConversion<int>();
 
+            // 配置外键关系
+            entity.HasOne(e => e.ItemCategory)
+                .WithMany()
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // 创建索引
             entity.HasIndex(e => e.MachineCode);
             entity.HasIndex(e => e.ItemName);
             entity.HasIndex(e => e.PurchaseTime);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.Strategy);
+            entity.HasIndex(e => e.CategoryId);
             // 创建复合索引，用于按机器码和时间查询
             entity.HasIndex(e => new { e.MachineCode, e.PurchaseTime });
             // 创建复合索引，用于按机器码和状态查询
             entity.HasIndex(e => new { e.MachineCode, e.Status });
+            // 创建复合索引，用于按分类和时间查询
+            entity.HasIndex(e => new { e.CategoryId, e.PurchaseTime });
         });
 
         // 配置 MonitoredItem 实体
@@ -202,10 +231,8 @@ public class Aion2DbContext : DbContext
                 .HasCharSet("utf8mb4")
                 .HasCollation("utf8mb4_unicode_ci");
 
-            entity.Property(e => e.Category)
-                .HasMaxLength(50)
-                .HasCharSet("utf8mb4")
-                .HasCollation("utf8mb4_unicode_ci");
+            // Category 字段已废弃，不映射到数据库
+            entity.Ignore(e => e.Category);
 
             entity.Property(e => e.ItemLevel);
 
@@ -234,18 +261,25 @@ public class Aion2DbContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 
+            // 外键关系
+            entity.HasOne(e => e.ItemCategory)
+                .WithMany()
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // 创建索引
             entity.HasIndex(e => e.MachineCode);
             entity.HasIndex(e => e.ItemName);
             entity.HasIndex(e => e.IsEnabled);
             entity.HasIndex(e => e.Priority);
-            entity.HasIndex(e => e.Category);
+            // entity.HasIndex(e => e.Category); // 已废弃，使用 CategoryId 代替
+            entity.HasIndex(e => e.CategoryId);
             
             // 创建复合索引
             entity.HasIndex(e => new { e.MachineCode, e.IsEnabled });
             entity.HasIndex(e => new { e.MachineCode, e.ItemName });
             entity.HasIndex(e => new { e.MachineCode, e.Priority, e.IsEnabled });
-            entity.HasIndex(e => new { e.ItemName, e.Category });
+            entity.HasIndex(e => new { e.MachineCode, e.CategoryId });
         });
 
         // 配置 MonitoringHistory 实体
@@ -313,8 +347,6 @@ public class Aion2DbContext : DbContext
             entity.HasIndex(e => e.DiscoveredAt);
             entity.HasIndex(e => e.IsProcessed);
             entity.HasIndex(e => e.ProcessStatus);
-            entity.HasIndex(e => e.MonitoredItemId);
-            entity.HasIndex(e => e.PurchaseRecordId);
             entity.HasIndex(e => e.IsAbnormalPrice);
             
             // 创建复合索引
@@ -322,18 +354,187 @@ public class Aion2DbContext : DbContext
             entity.HasIndex(e => new { e.MachineCode, e.IsProcessed });
             entity.HasIndex(e => new { e.MachineCode, e.ProcessStatus });
             entity.HasIndex(e => new { e.MachineCode, e.ItemName });
-            entity.HasIndex(e => new { e.MonitoredItemId, e.DiscoveredAt });
+        });
 
-            // 配置外键关系
-            entity.HasOne(e => e.MonitoredItem)
-                .WithMany()
-                .HasForeignKey(e => e.MonitoredItemId)
-                .OnDelete(DeleteBehavior.SetNull);
+        // 配置 ItemCategory 实体
+        modelBuilder.Entity<ItemCategory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
 
-            entity.HasOne(e => e.PurchaseRecord)
+            entity.Property(e => e.Name)
+                .IsRequired()
+                .HasMaxLength(50)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.Description)
+                .HasMaxLength(200)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // 创建索引
+            entity.HasIndex(e => e.Name).IsUnique();
+            entity.HasIndex(e => e.SortOrder);
+            entity.HasIndex(e => e.IsEnabled);
+        });
+
+        // 配置 Item 实体
+        modelBuilder.Entity<Item>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+
+            entity.Property(e => e.Name)
+                .IsRequired()
+                .HasMaxLength(100)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.Quality)
+                .HasMaxLength(20)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.IconPath)
+                .HasMaxLength(255);
+
+            entity.Property(e => e.Remarks)
+                .HasMaxLength(255)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.ReferencePrice)
+                .HasPrecision(18, 2);
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+            // 外键关系
+            entity.HasOne(e => e.Category)
                 .WithMany()
-                .HasForeignKey(e => e.PurchaseRecordId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 创建索引
+            entity.HasIndex(e => e.Name);
+            entity.HasIndex(e => e.CategoryId);
+            entity.HasIndex(e => e.IsEnabled);
+            entity.HasIndex(e => new { e.CategoryId, e.Name });
+        });
+
+        // 配置 MachineAuthorization 实体
+        modelBuilder.Entity<MachineAuthorization>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+
+            entity.Property(e => e.MachineCode)
+                .IsRequired()
+                .HasMaxLength(100)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.MachineName)
+                .HasMaxLength(100)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.Notes)
+                .HasMaxLength(500)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+            // 创建唯一索引
+            entity.HasIndex(e => e.MachineCode).IsUnique();
+            
+            // 创建普通索引
+            entity.HasIndex(e => e.IsEnabled);
+            entity.HasIndex(e => new { e.IsEnabled, e.MachineCode });
+        });
+
+        // 配置 AIConfiguration 实体
+        modelBuilder.Entity<AIConfiguration>(entity =>
+        {
+            entity.ToTable("ai_configurations");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd().HasColumnName("id");
+
+            entity.Property(e => e.MachineCode)
+                .HasColumnName("machine_code")
+                .IsRequired()
+                .HasMaxLength(100)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            // AI模式设置
+            entity.Property(e => e.AIMode)
+                .HasColumnName("ai_mode")
+                .IsRequired()
+                .HasMaxLength(50)
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
+            entity.Property(e => e.AutoBuyEnabled).HasColumnName("auto_buy_enabled");
+            entity.Property(e => e.AutoBuyMinScore).HasColumnName("auto_buy_min_score");
+            entity.Property(e => e.AutoIgnoreMaxScore).HasColumnName("auto_ignore_max_score");
+
+            // 权重配置
+            entity.Property(e => e.PriceWeight).HasColumnName("price_weight");
+            entity.Property(e => e.MarketWeight).HasColumnName("market_weight");
+            entity.Property(e => e.ProfitWeight).HasColumnName("profit_weight");
+            entity.Property(e => e.TimingWeight).HasColumnName("timing_weight");
+            entity.Property(e => e.HistoryWeight).HasColumnName("history_weight");
+
+            // 安全限制
+            entity.Property(e => e.MaxSingleInvestment)
+                .HasColumnName("max_single_investment")
+                .HasPrecision(15, 2);
+
+            entity.Property(e => e.RequireManualConfirmAmount)
+                .HasColumnName("require_manual_confirm_amount")
+                .HasPrecision(15, 2);
+
+            entity.Property(e => e.EnableAIBlacklist).HasColumnName("enable_ai_blacklist");
+
+            // 触发条件
+            entity.Property(e => e.TriggerOnStrategy).HasColumnName("trigger_on_strategy");
+            entity.Property(e => e.TriggerOnEveryCheck).HasColumnName("trigger_on_every_check");
+            entity.Property(e => e.ManualTriggerOnly).HasColumnName("manual_trigger_only");
+
+            // 状态和时间
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+            // 创建唯一索引
+            entity.HasIndex(e => e.MachineCode).IsUnique();
+            
+            // 创建普通索引
+            entity.HasIndex(e => e.IsActive);
         });
     }
 
@@ -388,6 +589,50 @@ public class Aion2DbContext : DbContext
                 else if (entry.State == EntityState.Modified)
                 {
                     monitoredItem.UpdatedAt = DateTime.Now;
+                }
+            }
+
+            if (entry.Entity is Item item)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    item.CreatedAt = DateTime.Now;
+                    item.UpdatedAt = DateTime.Now;
+                }
+                else if (entry.State == EntityState.Modified)
+                {
+                    item.UpdatedAt = DateTime.Now;
+                }
+            }
+
+            if (entry.Entity is ItemCategory itemCategory && entry.State == EntityState.Added)
+            {
+                itemCategory.CreatedAt = DateTime.Now;
+            }
+
+            if (entry.Entity is MachineAuthorization machineAuth)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    machineAuth.CreatedAt = DateTime.Now;
+                    machineAuth.UpdatedAt = DateTime.Now;
+                }
+                else if (entry.State == EntityState.Modified)
+                {
+                    machineAuth.UpdatedAt = DateTime.Now;
+                }
+            }
+
+            if (entry.Entity is AIConfiguration aiConfig)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    aiConfig.CreatedAt = DateTime.Now;
+                    aiConfig.UpdatedAt = DateTime.Now;
+                }
+                else if (entry.State == EntityState.Modified)
+                {
+                    aiConfig.UpdatedAt = DateTime.Now;
                 }
             }
         }

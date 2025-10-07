@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Aion2Helper.Data;
 using Aion2Helper.Models;
 using Aion2Helper.Utils;
@@ -41,7 +41,6 @@ public class MonitoringHistoryService : IDisposable
     /// <param name="itemLevel">物品等级</param>
     /// <param name="sellerName">卖家名称</param>
     /// <param name="quantity">数量</param>
-    /// <param name="monitoredItemId">关联的监控物品ID</param>
     /// <returns>添加的记录</returns>
     public async Task<MonitoringHistory> AddMonitoringRecordAsync(
         string itemName,
@@ -51,8 +50,7 @@ public class MonitoringHistoryService : IDisposable
         RiskLevel riskLevel,
         int? itemLevel = null,
         string? sellerName = null,
-        int quantity = 1,
-        long? monitoredItemId = null)
+        int quantity = 1)
     {
         try
         {
@@ -73,7 +71,6 @@ public class MonitoringHistoryService : IDisposable
                 RiskLevel = riskLevel,
                 SellerName = sellerName,
                 Quantity = quantity,
-                MonitoredItemId = monitoredItemId,
                 PriceDeviation = priceDeviation,
                 IsAbnormalPrice = Math.Abs(priceDeviation) > 0.5m, // 价格偏差超过50%认为异常
                 DiscoveredAt = DateTime.Now
@@ -83,7 +80,7 @@ public class MonitoringHistoryService : IDisposable
             await _context.SaveChangesAsync();
 
             #if DEBUG
-            Aion2Helper.Program.LogSuccess("监控历史", $"添加记录: {itemName} @ {currentPrice:N0}");
+            Logger.LogInfo("监控历史", $"添加记录: {itemName} @ {currentPrice:N0}");
             #endif
 
             return record;
@@ -91,7 +88,7 @@ public class MonitoringHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("监控历史", $"添加记录失败: {ex.Message}");
+            Logger.LogError("监控历史", $"添加记录失败: {ex.Message}");
             #endif
             
             throw;
@@ -124,8 +121,6 @@ public class MonitoringHistoryService : IDisposable
             
             // 构建查询
             var query = _context.MonitoringHistory
-                .Include(x => x.MonitoredItem)
-                .Include(x => x.PurchaseRecord)
                 .Where(x => x.MachineCode == currentMachineCode);
 
             // 应用筛选条件
@@ -185,7 +180,7 @@ public class MonitoringHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("监控历史", $"分页查询失败: {ex.Message}");
+            Logger.LogError("监控历史", $"分页查询失败: {ex.Message}");
             #endif
             
             // 返回空结果
@@ -257,7 +252,7 @@ public class MonitoringHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("监控历史", $"获取统计信息失败: {ex.Message}");
+            Logger.LogError("监控历史", $"获取统计信息失败: {ex.Message}");
             #endif
             
             return new MonitoringHistoryStats();
@@ -272,7 +267,7 @@ public class MonitoringHistoryService : IDisposable
     /// <param name="purchaseRecordId">关联的购买记录ID（可选）</param>
     /// <param name="notes">备注（可选）</param>
     /// <returns>是否更新成功</returns>
-    public async Task<bool> UpdateProcessStatusAsync(long recordId, MonitoringProcessStatus processStatus, long? purchaseRecordId = null, string? notes = null)
+    public async Task<bool> UpdateProcessStatusAsync(long recordId, MonitoringProcessStatus processStatus, string? notes = null)
     {
         try
         {
@@ -289,11 +284,6 @@ public class MonitoringHistoryService : IDisposable
             record.ProcessStatus = processStatus;
             record.IsProcessed = processStatus != MonitoringProcessStatus.Pending;
             record.ProcessedAt = DateTime.Now;
-            
-            if (purchaseRecordId.HasValue)
-            {
-                record.PurchaseRecordId = purchaseRecordId.Value;
-            }
 
             if (!string.IsNullOrWhiteSpace(notes))
             {
@@ -303,7 +293,7 @@ public class MonitoringHistoryService : IDisposable
             await _context.SaveChangesAsync();
 
             #if DEBUG
-            Aion2Helper.Program.LogInfo("监控历史", $"更新处理状态: {record.ItemName} -> {processStatus}");
+            Logger.LogInfo("监控历史", $"更新处理状态: {record.ItemName} -> {processStatus}");
             #endif
 
             return true;
@@ -311,7 +301,7 @@ public class MonitoringHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("监控历史", $"更新处理状态失败: {ex.Message}");
+            Logger.LogError("监控历史", $"更新处理状态失败: {ex.Message}");
             #endif
             
             return false;
@@ -330,7 +320,6 @@ public class MonitoringHistoryService : IDisposable
             var currentMachineCode = MachineCodeHelper.GetMachineCode();
             
             return await _context.MonitoringHistory
-                .Include(x => x.MonitoredItem)
                 .Where(x => x.MachineCode == currentMachineCode)
                 .OrderByDescending(x => x.DiscoveredAt)
                 .Take(count)
@@ -339,7 +328,7 @@ public class MonitoringHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("监控历史", $"获取最近监控记录失败: {ex.Message}");
+            Logger.LogError("监控历史", $"获取最近监控记录失败: {ex.Message}");
             #endif
             
             return new List<MonitoringHistory>();

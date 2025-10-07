@@ -37,11 +37,24 @@ public class MonitoredItem
     public string ItemName { get; set; } = string.Empty;
 
     /// <summary>
-    /// 物品类别
+    /// 物品类别（字符串，已废弃，使用 CategoryId 代替）
     /// </summary>
+    [Obsolete("使用 CategoryId 和 ItemCategory 代替")]
     [Column("category")]
     [MaxLength(50)]
-    public string Category { get; set; } = string.Empty;
+    public string? Category { get; set; }
+
+    /// <summary>
+    /// 物品分类ID（关联到物品分类表）
+    /// </summary>
+    [Column("category_id")]
+    public int? CategoryId { get; set; }
+
+    /// <summary>
+    /// 物品分类（导航属性）
+    /// </summary>
+    [ForeignKey("CategoryId")]
+    public ItemCategory? ItemCategory { get; set; }
 
     /// <summary>
     /// 物品等级
@@ -171,7 +184,7 @@ public class MonitoredItem
     /// 获取显示名称
     /// </summary>
     [NotMapped]
-    public string DisplayName => string.IsNullOrEmpty(Category) ? ItemName : $"{ItemName} ({Category})";
+    public string DisplayName => ItemCategory != null ? $"{ItemName} ({ItemCategory.Name})" : ItemName;
 
     public override string ToString()
     {

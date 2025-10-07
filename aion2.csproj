@@ -6,20 +6,16 @@
     <RootNamespace>Aion2Helper</RootNamespace>
     <AssemblyName>Aion2Helper</AssemblyName>
     <PackageId>Aion2Helper</PackageId>
-    <AssemblyTitle>Aion 2 拍卖行智能辅助系统</AssemblyTitle>
-    <AssemblyDescription>基于图像识别的Aion 2拍卖行辅助工具</AssemblyDescription>
-    <AssemblyCompany>Aion2 Helper</AssemblyCompany>
-    <AssemblyProduct>Aion2 Helper</AssemblyProduct>
-    <AssemblyCopyright>Copyright (C) 2024</AssemblyCopyright>
+    <Product>Aion2 Helper</Product>
+    <Company>Aion2 Helper</Company>
     <Copyright>Copyright (C) 2024</Copyright>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <AssemblyInformationalVersion>1.0.0.0</AssemblyInformationalVersion>
     <Version>1.0.0.0</Version>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
 
   <ItemGroup>
@@ -35,6 +31,18 @@
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="MySqlConnector" Version="2.3.7" />
     <PackageReference Include="Tesseract" Version="5.2.0" />
+    <PackageReference Include="System.Windows.Forms.DataVisualization" Version="1.0.0-prerelease.20110.1" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
+  </ItemGroup>
+
+  <!-- 排除子项目文件夹 -->
+  <ItemGroup>
+    <Compile Remove="Aion2Helper.Core\**" />
+    <EmbeddedResource Remove="Aion2Helper.Core\**" />
+    <None Remove="Aion2Helper.Core\**" />
+    <Compile Remove="Aion2Helper.Admin\**" />
+    <EmbeddedResource Remove="Aion2Helper.Admin\**" />
+    <None Remove="Aion2Helper.Admin\**" />
   </ItemGroup>
 
   <!-- 自动复制 images 目录到输出目录 -->
@@ -42,6 +50,10 @@
     <Content Include="images\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="Aion2Helper.Core\Aion2Helper.Core.csproj" />
   </ItemGroup>
 
 </Project>

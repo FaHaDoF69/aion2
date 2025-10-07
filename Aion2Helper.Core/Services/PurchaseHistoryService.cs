@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Aion2Helper.Data;
 using Aion2Helper.Models;
 using Aion2Helper.Utils;
@@ -54,6 +54,7 @@ public class PurchaseHistoryService : IDisposable
             
             // 构建查询
             var query = _context.PurchaseRecords
+                .Include(x => x.ItemCategory)
                 .Where(x => x.MachineCode == currentMachineCode);
 
             // 应用筛选条件
@@ -109,7 +110,7 @@ public class PurchaseHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("交易历史", $"分页查询失败: {ex.Message}");
+            Logger.LogError("交易历史", $"分页查询失败: {ex.Message}");
             #endif
             
             // 返回空结果
@@ -182,7 +183,7 @@ public class PurchaseHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("交易历史", $"获取统计信息失败: {ex.Message}");
+            Logger.LogError("交易历史", $"获取统计信息失败: {ex.Message}");
             #endif
             
             return new PurchaseHistoryStats();
@@ -209,7 +210,7 @@ public class PurchaseHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("交易历史", $"获取最近交易记录失败: {ex.Message}");
+            Logger.LogError("交易历史", $"获取最近交易记录失败: {ex.Message}");
             #endif
             
             return new List<PurchaseRecord>();
@@ -233,7 +234,7 @@ public class PurchaseHistoryService : IDisposable
             await _context.SaveChangesAsync();
 
             #if DEBUG
-            Aion2Helper.Program.LogSuccess("交易历史", $"添加交易记录: {record.ItemName} x{record.Quantity} @ {record.Price:N0}");
+            Logger.LogInfo("交易历史", $"添加交易记录: {record.ItemName} x{record.Quantity} @ {record.Price:N0}");
             #endif
 
             return record;
@@ -241,7 +242,7 @@ public class PurchaseHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("交易历史", $"添加交易记录失败: {ex.Message}");
+            Logger.LogError("交易历史", $"添加交易记录失败: {ex.Message}");
             #endif
             
             throw;
@@ -285,7 +286,7 @@ public class PurchaseHistoryService : IDisposable
             await _context.SaveChangesAsync();
 
             #if DEBUG
-            Aion2Helper.Program.LogInfo("交易历史", $"更新交易状态: {record.ItemName} -> {status}");
+            Logger.LogInfo("交易历史", $"更新交易状态: {record.ItemName} -> {status}");
             #endif
 
             return true;
@@ -293,7 +294,7 @@ public class PurchaseHistoryService : IDisposable
         catch (Exception ex)
         {
             #if DEBUG
-            Aion2Helper.Program.LogError("交易历史", $"更新交易状态失败: {ex.Message}");
+            Logger.LogError("交易历史", $"更新交易状态失败: {ex.Message}");
             #endif
             
             return false;
